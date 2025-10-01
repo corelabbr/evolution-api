@@ -1,24 +1,14 @@
-name: Deploy - Production - WebApp F1DELIZE
+name: Deploy - Production - Backend
 
 on:
   push:
     branches:
       - main
-    # tags:
-    #   - '*'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      AWS_ACCESS_KEY_ID: ${{ vars.PROD_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
-      ENABLE_VALIDATE_TAXNUMBER: ${{ vars.PROD_ENABLE_VALIDATE_TAXNUMBER }}
-      F1DELIZE_BASE_URL: ${{ vars.PROD_F1DELIZE_BASE_URL }}
-      F1DELIZE_LINK_URL: ${{ vars.PROD_F1DELIZE_LINK_URL }}
-      F1DELIZE_SOCKET_URL: ${{ vars.PROD_F1DELIZE_SOCKET_URL }}
-      FRONTEND_URL: ${{ vars.PROD_FRONTEND_URL }}
-    timeout-minutes: 6
+    timeout-minutes: 10
     steps:
       - name: Checkout do repositorio
         uses: actions/checkout@v4
@@ -26,25 +16,32 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '14.20.0'
+          node-version: '20.10.0'
           cache: 'npm'
 
       - name: Install dependencies
         run: |
-          npm install
+          npm install --no-fund --silent
 
       - name: Run Build
         run: |
-          export NODE_ENV="production"
           npm run build
 
-      - name: Deploy to S3
-        uses: reggionick/s3-deploy@v4
-        with:
-          folder: dist
-          bucket: ${{ vars.PROD_S3_BUCKET }}
-          bucket-region: ${{ vars.PROD_S3_BUCKET_REGION }}
-          dist-id: ${{ vars.PROD_CLOUDFRONT_DISTRIBUTION_ID }}
-          invalidation: /*
-          delete-removed: true
-          no-cache: true
+      - name: Deploy Backend
+        uses: easingthemes/ssh-deploy@v5.0.0
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_BACKEND_EC2_SSH_PRIVATE_KEY }}
+          ARGS: "-rlgoDzvc -i"
+          SOURCE: "/"
+          REMOTE_HOST: ${{ secrets.PROD_BACKEND_REMOTE_HOST }}
+          REMOTE_USER: ${{ secrets.PROD_BACKEND_REMOTE_USER }}
+          TARGET: ${{ vars.PROD_BACKEND_REMOTE_TARGET }}
+          EXCLUDE: "/dist/, /node_modules/, ./git/"
+          SCRIPT_AFTER: |
+            echo "==> Script apos o Deploy"
+            echo "==> Instalar dependências"
+            cd ${{ vars.PROD_BACKEND_REMOTE_TARGET }}
+            npm install --no-fund --silent
+            echo "==> Reiniciando o PM2"
+            pm2 restart ApiEvolution -a --time
+
