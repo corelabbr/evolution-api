@@ -1,0 +1,50 @@
+name: Deploy - Production - WebApp F1DELIZE
+
+on:
+  push:
+    branches:
+      - main
+    # tags:
+    #   - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ vars.PROD_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+      ENABLE_VALIDATE_TAXNUMBER: ${{ vars.PROD_ENABLE_VALIDATE_TAXNUMBER }}
+      F1DELIZE_BASE_URL: ${{ vars.PROD_F1DELIZE_BASE_URL }}
+      F1DELIZE_LINK_URL: ${{ vars.PROD_F1DELIZE_LINK_URL }}
+      F1DELIZE_SOCKET_URL: ${{ vars.PROD_F1DELIZE_SOCKET_URL }}
+      FRONTEND_URL: ${{ vars.PROD_FRONTEND_URL }}
+    timeout-minutes: 6
+    steps:
+      - name: Checkout do repositorio
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '14.20.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm install
+
+      - name: Run Build
+        run: |
+          export NODE_ENV="production"
+          npm run build
+
+      - name: Deploy to S3
+        uses: reggionick/s3-deploy@v4
+        with:
+          folder: dist
+          bucket: ${{ vars.PROD_S3_BUCKET }}
+          bucket-region: ${{ vars.PROD_S3_BUCKET_REGION }}
+          dist-id: ${{ vars.PROD_CLOUDFRONT_DISTRIBUTION_ID }}
+          invalidation: /*
+          delete-removed: true
+          no-cache: true
